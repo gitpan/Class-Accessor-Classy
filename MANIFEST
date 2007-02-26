@@ -6,3 +6,6 @@ META.yml			# Will be created by "make dist"
 README
 t/00-load.t
 t/01-basic.t
+t/02-report.t
+t/03-class.t
+t/04-list.t

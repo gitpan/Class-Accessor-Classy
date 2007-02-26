@@ -8,6 +8,8 @@ my @exports;
 BEGIN {
   eval {require Class::Accessor::Classy};
   ok(!$@);
+
+  can_ok('Class::Accessor::Classy', 'exports');
   @exports = keys(%{{Class::Accessor::Classy->exports}});
   ok(@exports);
 };
@@ -33,8 +35,6 @@ can_ok('Foo',
 );
 ok(! Foo->can("set_$_"), "do not want set_$_") for qw(fee fie foe);
 
-can_ok('Class::Accessor::Classy', 'exports');
-
 # "no" is compile-time
 BEGIN {ok(! Foo->can($_), "do not want $_") for(@exports)};
 
@@ -56,6 +56,7 @@ ok(! Deal->can("set_$_"), "do not want set_$_") for qw(a b c);
 # I didn't say "no" above"
 BEGIN {ok(Deal->can($_), "still have $_") for(@exports)};
 
+# now check unimport
 {
   package Deal; 
   no Class::Accessor::Classy;
