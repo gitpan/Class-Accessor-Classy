@@ -103,5 +103,35 @@ BEGIN {ok(! Deal->can($_), "no more $_") for(@exports)};
   ok($@, 'oops');
   like($@, qr/odd number/, 'message');
 }
+{
+  {
+    package Baz;
+    use Class::Accessor::Classy;
+    with 'new';
+    ro 'q';
+    ri 's';
+    no  Class::Accessor::Classy;
+  }
+  can_ok('Baz', 'new');
+  can_ok('Baz', 'q');
+  can_ok('Baz', 'get_q');
+  can_ok('Baz', 's');
+  can_ok('Baz', 'get_s');
+  can_ok('Baz', 'set_s');
+  ok(! Baz->can('set_q'), 'do not want set_q');
+  my $baz = Baz->new(q => 5, s => 2);
+  is($baz->q, 5, 'getter ok');
+  is($baz->s, 2, 'getter ok');
+  eval {$baz->set_s(3)};
+  my $err = $@;
+  ok($err, 'slap');
+  like($err, qr/is immutable/, 'message');
+  is($baz->s, 2,     'immutable ok');
+  is($baz->get_s, 2,     'immutable ok');
+  delete($baz->{s});
+  is($baz->set_s(3), 3);
+  is($baz->s, 3,     'setter ok');
+  is($baz->get_s, 3, 'setter ok');
+}
 
 # vi:ts=2:sw=2:et:sta

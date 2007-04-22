@@ -1,0 +1,25 @@
+Revision history for Class-Accessor-Classy
+
+v0.1.3 2007-04-22
+
+  * ri() immutable accessor maker
+
+  * play nice with Module::Refresh
+
+  * getter/setter overrides for *some* types
+
+v0.0.2 2007-02-26
+
+  * dereferenced-list accessors
+
+  * class accessors
+
+  * reporting
+
+  * introspection (experimental)
+
+v0.0.1 2006-11-01
+
+  * initial release
+
+# vim:ts=2:sw=2:et:sta

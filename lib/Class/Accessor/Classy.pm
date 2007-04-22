@@ -1,5 +1,5 @@
 package Class::Accessor::Classy;
-$VERSION = eval{require version}?version::qv($_):$_ for(0.1.2);
+$VERSION = eval{require version}?version::qv($_):$_ for(0.1.3);
 
 use warnings;
 use strict;
@@ -114,6 +114,20 @@ accessor generator.
 
 =over
 
+=item NOTE
+
+You do not subclass Class::Accessor::Classy to construct your objects.
+
+If you are just creating MyObject, you are not inheriting any of these
+methods.
+
+The rest of this documentation only pertains to you if you are trying to
+create something like Class::Accessor::Classy::MyWay.
+
+=back
+
+=over
+
 =item notation:
 
 Read these as: $CAC = 'Class::Accessor::Classy'; (or whatever subclass
@@ -136,6 +150,18 @@ sub exports {
     },
     this => sub () {
       (caller)[0];
+    },
+    getter => sub (&) {
+      my ($subref) = @_;
+      $package->install_sub($CP->(caller), '--get', $subref,
+        'custom getter'
+      );
+    },
+    setter => sub (&) {
+      my ($subref) = @_;
+      $package->install_sub($CP->(caller), '--set', $subref,
+        'custom setter'
+      );
     },
     constant => sub ($$) { # same as class_ro
       $package->make_class_data('ro', $CP->(caller), @_);
@@ -195,6 +221,13 @@ sub exports {
       $package->make_getters($class, @list);
       $package->make_aliases($class, @list);
       $package->make_setters($class, @list);
+    },
+    ri => sub (@) {
+      my (@list) = @_;
+      my $class = $CP->(caller);
+      $package->make_getters($class, @list);
+      $package->make_aliases($class, @list);
+      $package->make_immutable($class, @list);
     },
     rs => sub (@) {
       my (@list) = @_;
@@ -370,9 +403,16 @@ sub install_sub {
   my $package = shift;
   my ($class, $name, $subref, $note) = @_;
   my $fullname = $class . '::' . $name;
+  if(defined(&{$fullname})) {
+    # play nice with Module::Refresh and such?
+    my $lvl = 1;
+    while(defined(my $p = caller($lvl++))) {
+      if($p eq 'Module::Refresh') { $lvl = 0; last; }
+    }
+    $lvl and croak("$fullname is already defined");
+  }
   {
     no strict 'refs';
-    defined(&{$fullname}) and die;
     *{$fullname} = $subref;
   }
   $package->annotate($class, $name, $note) if($note);
@@ -438,6 +478,30 @@ sub make_standards {
 } # end closure
 ########################################################################
 
+=head2 _getter
+
+Returns a compiled getter subref corresponding to whether or not the
+class has a '--get' method.
+
+  $CAC->_getter($class, $item);
+
+=cut
+
+sub _getter {
+  my $package = shift;
+  my ($class, $item) = @_;
+  if($class->can('--get')) {
+    return $package->do_eval(
+      "sub {\$_[0]->\$\{\\'--get'\}('$item')}",
+      $item
+    );
+  }
+  else {
+    return $package->do_eval("sub {\$_[0]->{'$item'}}", $item);
+  }
+} # end subroutine _getter definition
+########################################################################
+
 =head2 make_getters
 
   $CAC->make_getters($class, @list);
@@ -448,10 +512,42 @@ sub make_getters {
   my $package = shift;
   my ($class, @list) = @_;
   foreach my $item (@list) {
-    my $subref = $package->do_eval("sub {\$_[0]->{'$item'}}", $item);
+    my $subref = $package->_getter($class, $item);
     $package->install_sub($class, $item, $subref, 'getter');
   }
 } # end subroutine make_getters definition
+########################################################################
+
+=head2 _setter
+
+Returns a compiled setter subref corresponding to whether or not the
+class has a '--set' method.
+
+  $CAC->_setter($class, $item);
+
+=cut
+
+sub _setter {
+  my $package = shift;
+  my ($class, $item, %args) = @_;
+
+  my $before = $args{before} || '';
+
+  if($class->can('--set')) {
+    return $package->do_eval(
+      'sub {my $self = shift; ' . $before .
+        q($self->${\'--set'}) . "('$item',\$_[0])}",
+      $item
+    );
+  }
+  else {
+    return $package->do_eval(
+      'sub {my $self = shift; ' . $before .
+        '$self'."->{'$item'} = \$_[0]}",
+      $item
+    );
+  }
+} # end subroutine _setter definition
 ########################################################################
 
 =head2 make_setters
@@ -464,11 +560,30 @@ sub make_setters {
   my $package = shift;
   my ($class, @list) = @_;
   foreach my $item (@list) {
-    my $subref = $package->do_eval(
-      "sub {\$_[0]->{'$item'} = \$_[1]}", $item);
+    my $subref = $package->_setter($class, $item);
     $package->install_sub($class, 'set_' . $item, $subref, 'setter');
   }
 } # end subroutine make_setters definition
+########################################################################
+
+=head2 make_immutable
+
+Creates immutable (one-time-only) setters.
+
+  CAC->make_immutable($class, @list);
+
+=cut
+
+sub make_immutable {
+  my $package = shift;
+  my ($class, @list) = @_;
+  foreach my $item (@list) {
+    my $check = 'exists($self->{' . $item . '}) and croak(' .
+      qq("$item is immutable") . ');';
+    my $subref = $package->_setter($class, $item, before => $check);
+    $package->install_sub($class, 'set_' . $item, $subref, 'immutable');
+  }
+} # end subroutine make_immutable definition
 ########################################################################
 
 =head2 make_secrets
@@ -482,8 +597,7 @@ sub make_secrets {
   my ($class, @list) = @_;
   my @names;
   foreach my $item (@list) {
-    my $subref = $package->do_eval(
-      "sub {\$_[0]->{'$item'} = \$_[1]}", $item);
+    my $subref = $package->_setter($class, $item);
     my $name = '--set_' . $item;
     push(@names, $name);
     $package->install_sub($class, $name, $subref, 'private');
