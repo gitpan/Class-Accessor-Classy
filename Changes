@@ -1,5 +1,11 @@
 Revision history for Class-Accessor-Classy
 
+v0.9.0 2008-02-18
+
+  * lv() lvalue accessor/mutator maker
+
+  * documentation for the frontend 'maker' functions
+
 v0.1.3 2007-04-22
 
   * ri() immutable accessor maker
@@ -8,7 +14,7 @@ v0.1.3 2007-04-22
 
   * getter/setter overrides for *some* types
 
-v0.0.2 2007-02-26
+v0.1.2 2007-02-26
 
   * dereferenced-list accessors
 
@@ -18,7 +24,7 @@ v0.0.2 2007-02-26
 
   * introspection (experimental)
 
-v0.0.1 2006-11-01
+v0.1.1 2006-11-01
 
   * initial release
 

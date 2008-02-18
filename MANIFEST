@@ -10,3 +10,4 @@ t/02-report.t
 t/03-class.t
 t/04-list.t
 t/05-set-get.t
+t/lvalue.t

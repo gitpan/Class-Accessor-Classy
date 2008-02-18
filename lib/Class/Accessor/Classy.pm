@@ -1,5 +1,5 @@
 package Class::Accessor::Classy;
-$VERSION = eval{require version}?version::qv($_):$_ for(0.1.3);
+$VERSION = v0.9.0;
 
 use warnings;
 use strict;
@@ -49,6 +49,119 @@ Unlike other class-modifying code, this is not designed to be inherited
 from.  Instead, you simply use it and get an invisible subclass
 containing your accessors.  If you use the 'no' syntax (to call
 unimport), you are left with a squeaky-clean namespace.
+
+After 'use' and before 'no', the following pieces of syntax are
+available.
+
+=head2 with
+
+Add a 'standard' method to your class.
+
+=over
+
+=item new
+
+=back
+
+=head2 ro
+
+Read-only properties (accessors only.)
+
+  ro qw(foo bar baz);
+
+=head2 rw
+
+Define read-write (accessor + mutator) properties.
+
+  rw qw(foo bar baz);
+
+=head2 lv
+
+Properties with lvalue accessors.
+
+  lv qw(thing deal stuff);
+
+=head2 ri
+
+Immutable properties.  Once set, further calls to the mutator throw
+errors.
+
+  ri qw(foo bar baz);
+
+=head2 rs
+
+Read-only properties with a secret mutator.
+
+  rs foo => \(my $set_foo);
+
+=head2 lo
+
+Read-only list properties.  These are stored as an array-ref, but the
+accessor returns a list.
+
+  lo qw(foo bar baz);
+
+=head2 lw
+
+Read-write list properties.  The mutator takes a list.
+
+  lw qw(foo bar baz);
+
+=head2 ls
+
+List property with a secret mutator.
+
+  ls foo => \(my $set_foo);
+
+=head2 this
+
+A shortcut for your classname.  Useful for e.g. defining one constant in
+terms of another.
+
+  this->some_class_method;
+
+=head2 getter
+
+Define a custom getter.
+
+=head2 setter
+
+Define a custom setter.
+
+=head2 constant
+
+A class constant.
+
+  constant foo => 7;
+
+=head2 ro_c
+
+Read-only class method.
+
+=head2 rw_c
+
+A read-write class method, with a default.
+
+  rw_c foo => 9;
+
+=head2 rs_c
+
+A class method with a secret setter.
+
+  rs_c bar => \(my $set_bar) => 12;
+
+=head2 in
+
+Specify the destination package.  You need to set this before defining
+anything else (but it is usually best to just not set it.)
+
+  in 'why_be_so_secretive';
+
+=head2 aka
+
+Add an alias for an existing method.
+
+  aka have_method => 'want_method', 'and_also_want';
 
 =cut
 
@@ -222,6 +335,12 @@ sub exports {
       $package->make_aliases($class, @list);
       $package->make_setters($class, @list);
     },
+    lv => sub (@) {
+      my (@list) = @_;
+      my $class = $CP->(caller);
+      $package->make_lv_getters($class, @list);
+      $package->make_aliases($class, @list);
+    },
     ri => sub (@) {
       my (@list) = @_;
       my $class = $CP->(caller);
@@ -300,6 +419,11 @@ sub exports {
         ${$r[$_]} = $ans[$_] for(0..$#ans);
       }
       return(@ans);
+    },
+    aka => sub (@) {
+      my ($from, @to) = @_;
+      my $class = $CP->(caller);
+      $package->make_aka($class, $from, @to);
     },
   );
 } # end subroutine exports definition
@@ -489,15 +613,21 @@ class has a '--get' method.
 
 sub _getter {
   my $package = shift;
-  my ($class, $item) = @_;
+  my ($class, $item, $opt) = @_;
+
+  my $and = '';
+  if($opt and my $attr = $opt->{attrs}) {
+    $and = ' () ' . $attr;
+  }
+
   if($class->can('--get')) {
     return $package->do_eval(
-      "sub {\$_[0]->\$\{\\'--get'\}('$item')}",
+      "sub$and {\$_[0]->\$\{\\'--get'\}('$item')}",
       $item
     );
   }
   else {
-    return $package->do_eval("sub {\$_[0]->{'$item'}}", $item);
+    return $package->do_eval("sub$and {\$_[0]->{'$item'}}", $item);
   }
 } # end subroutine _getter definition
 ########################################################################
@@ -516,6 +646,24 @@ sub make_getters {
     $package->install_sub($class, $item, $subref, 'getter');
   }
 } # end subroutine make_getters definition
+########################################################################
+
+=head2 make_lv_getters
+
+  $CAC->make_lv_getters($class, @list);
+
+=cut
+
+sub make_lv_getters {
+  my $package = shift;
+  my ($class, @list) = @_;
+
+  require attributes;
+  foreach my $item (@list) {
+    my $subref = $package->_getter($class, $item, {attrs => ':lvalue'});
+    $package->install_sub($class, $item, $subref, 'getter');
+  }
+} # end subroutine make_lv_getters definition
 ########################################################################
 
 =head2 _setter
@@ -608,6 +756,8 @@ sub make_secrets {
 
 =head2 make_aliases
 
+Constructs 'get_' aliases for a @list of accessors.
+
   $CAC->make_aliases($class, @list);
 
 =cut
@@ -620,6 +770,30 @@ sub make_aliases {
     $package->install_sub($class, 'get_' . $item, $subref, "->$item");
   }
 } # end subroutine make_aliases definition
+########################################################################
+
+=head2 make_aka
+
+Create a list of alias methods which runtime refer to $realname.
+
+  $CAC->make_aka($where, $realname, @aliases);
+
+=cut
+
+sub make_aka {
+  my $package = shift;
+  my ($class, $item, @aka) = @_;
+
+  my $get_attr = attributes->can('get');
+  my $got = $class->can($item);
+  my $attr = (
+    $get_attr and $got and grep(/^lvalue$/, $get_attr->($got))
+    ) ? '() :lvalue' : '';
+  my $subref = $package->do_eval("sub $attr {\$_[0]->$item}", $item);
+  foreach my $aka (@aka) {
+    $package->install_sub($class, $aka, $subref, "->$item");
+  }
+} # end subroutine make_aka definition
 ########################################################################
 
 =head2 do_eval
