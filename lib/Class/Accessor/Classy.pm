@@ -1,5 +1,5 @@
 package Class::Accessor::Classy;
-$VERSION = v0.9.0;
+$VERSION = v0.9.1;
 
 use warnings;
 use strict;
@@ -42,6 +42,18 @@ Class::Accessor::Classy - accessors with minimal inheritance
   # NOTE I'm thinking of deprecating the get_foo() usage
   warn "foo ", $obj->foo;
   YourPackage->$set_socks("tube");
+
+=head1 About
+
+This module provides an extremely small-footprint accessor/mutator
+declaration scheme for fast and convenient object attribute setup.  It
+is intended as a simple and speedy mechanism for preventing hash-key
+typos rather than a full-blown object system with type checking and so
+on.
+
+The accessor methods appear as a hidden parent class of your package and
+generally try to stay out of the way.  The accessors and mutators
+generated are of the form C<foo()> and C<set_foo()>, respectively.
 
 =head1 Frontend
 
@@ -105,7 +117,10 @@ accessor returns a list.
 
 Read-write list properties.  The mutator takes a list.
 
-  lw qw(foo bar baz);
+  lw 'foo';
+
+This defaults to create foo()|get_foo(), set_foo(), and add_foo()
+methods.  Other features are possible here, but currently experimental.
 
 =head2 ls
 
@@ -386,7 +401,7 @@ sub exports {
     lw => sub { # no list here
       my ($item, @args) = @_;
       my @f = @args;
-      @f and croak("not yet");
+      #@f and croak("not yet");
       $package->make_array_method(
         class => $CP->(caller),
         item  => $item, 
@@ -875,10 +890,10 @@ sub _get_array_subs {
       push(\@{\$self->{$item}}, \@_);}",
     'pop' => "sub {$s\->{$item} or
       Carp::croak(\"'$item' list is empty\");
-      pop(\@{\$self->{$item}});}",
+      pop(\@{$s\->{$item}});}",
     'shift' => "sub {$s\->{$item} or
       Carp::croak(\"'$item' list is empty\");
-      shift(\@{\$self->{$item}});}",
+      shift(\@{$s\->{$item}});}",
     'unshift' => "sub {my \$self = shift;
       \$self->{$item} or Carp::croak(\"'$item' list is empty\");
       unshift(\@{\$self->{$item}}, \@_);}",
